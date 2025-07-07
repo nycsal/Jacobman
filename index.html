@@ -1,1 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Jacob Spider-Man Game</title>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: linear-gradient(to bottom, #87ceeb, #f0f8ff);
+    font-family: 'Arial', sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+  }
+  #gameContainer {
+    position: relative;
+    width: 400px;
+    height: 600px;
+    margin: 20px auto;
+    background: #222;
+    border-radius: 15px;
+    box-shadow: 0 0 20px #000;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #scoreBoard {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 50px;
+    background: #111;
+    color: #fff;
+    font-size: 20px;
+    line-height: 50px;
+    text-align: center;
+    font-weight: bold;
+    letter-spacing: 2px;
+    z-index: 10;
+  }
+  #instructions {
+    position: absolute;
+    top: 50px;
+    width: 100%;
+    height: 150px;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    font-size: 18px;
+    padding: 10px;
+    box-sizing: border-box;
+    text-align: center;
+    z-index: 20;
+    border-bottom: 2px solid #f39c12;
+  }
+  #startButton {
+    margin-top: 10px;
+    padding: 10px 20px;
+    font-size: 18px;
+    background: #f39c12;
+    border: none;
+    border-radius: 8px;
+    color: #222;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  #gameCanvas {
+    display: block;
+    background: #333;
+    margin: 0 auto;
+    border-radius: 10px;
+    margin-top: 200px;
+  }
+  #gameOverScreen {
+    position: absolute;
+    top: 50px;
+    width: 100%;
+    height: 550px;
+    background: rgba(0,0,0,0.9);
+    color: #f39c12;
+    font-size: 36px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 550px;
+    z-index: 30;
+    display: none;
+    border-radius: 15px;
+  }
+</style>
+</head>
+<body>
+  <div id="gameContainer">
+    <div id="scoreBoard">Score: 0 | Level: 1 | Lives: 3</div>
+    <div id="instructions">
+      <div>Welcome to Jacob's Spider-Man Game!</div>
+      <div>Tap left side to shoot net from left hand.</div>
+      <div>Tap right side to shoot net from right hand.</div>
+      <div>Catch the falling jokers before 3 land.</div>
+      <div>6 levels with increasing difficulty.</div>
+      <button id="startButton">Start Game</button>
+    </div>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="gameOverScreen">Game Over! Tap to Restart</div>
+  </div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreBoard = document.getElementById('scoreBoard');
+    const instructions = document.getElementById('instructions');
+    const startButton = document.getElementById('startButton');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+
+    const WIDTH = canvas.width;
+    const HEIGHT = canvas.height;
+
+    let score = 0;
+    let level = 1;
+    let lives = 3;
+    let jokers = [];
+    let nets = [];
+    let gameRunning = false;
+    let gameOver = false;
+    let spawnInterval = 2000; // initial joker spawn interval in ms
+    let lastSpawn = 0;
+
+    // Spider-Man (Jacob) position
+    const spiderManY = HEIGHT - 100;
+    const spiderManX = WIDTH / 2;
+
+    // Joker size
+    const jokerSize = 40;
+    // Net size
+    const netWidth = 20;
+    const netHeight = 10;
+
+    // For simplicity, we use colorful shapes instead of images
+
+    function drawSpiderMan() {
+      // Draw Jacob Spider-Man at bottom center
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(spiderManX, spiderManY, 40, 0, Math.PI * 2);
+      ctx.fill();
+      // Draw eyes
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(spiderManX - 15, spiderManY - 10, 10, 0, Math.PI * 2);
+      ctx.arc(spiderManX + 15, spiderManY - 10, 10, 0, Math.PI * 2);
+      ctx.fill();
+      // Draw nets on hands
+      nets.forEach(net => {
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(net.x, net.y, netWidth, netHeight);
+      });
+    }
+
+    function drawJokers() {
+      ctx.fillStyle = '#ffff00';
+      jokers.forEach(joker => {
+        ctx.beginPath();
+        ctx.arc(joker.x, joker.y, jokerSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        // Joker face
+        ctx.fillStyle = '#000';
+        ctx.fillRect(joker.x - 10, joker.y - 10, 20, 5);
+        ctx.fillRect(joker.x - 10, joker.y + 5, 20, 5);
+        ctx.fillStyle = '#ffff00';
+      });
+    }
+
+    function updateScoreBoard() {
+      scoreBoard.textContent = `Score: ${score} | Level: ${level} | Lives: ${lives}`;
+    }
+
+    function spawnJoker() {
+      const x = Math.random() * (WIDTH - jokerSize) + jokerSize / 2;
+      jokers.push({ x: x, y: -jokerSize, speed: 1 + level * 0.5 });
+    }
+
+    function updateJokers(deltaTime) {
+      for (let i = jokers.length - 1; i >= 0; i--) {
+        jokers[i].y += jokers[i].speed * deltaTime * 0.1;
+        if (jokers[i].y > HEIGHT) {
+          jokers.splice(i, 1);
+          lives--;
+          if (lives <= 0) {
+            endGame();
+          }
+          updateScoreBoard();
+        }
+      }
+    }
+
+    function updateNets(deltaTime) {
+      for (let i = nets.length - 1; i >= 0; i--) {
+        nets[i].y -= 5 * deltaTime * 0.1;
+        if (nets[i].y < 0) {
+          nets.splice(i, 1);
+        }
+      }
+    }
+
+    function checkCollisions() {
+      for (let i = jokers.length - 1; i >= 0; i--) {
+        for (let j = nets.length - 1; j >= 0; j--) {
+          if (
+            nets[j].x < jokers[i].x + jokerSize / 2 &&
+            nets[j].x + netWidth > jokers[i].x - jokerSize / 2 &&
+            nets[j].y < jokers[i].y + jokerSize / 2 &&
+            nets[j].y + netHeight > jokers[i].y - jokerSize / 2
+          ) {
+            // Collision detected
+            jokers.splice(i, 1);
+            nets.splice(j, 1);
+            score += 10;
+            updateScoreBoard();
+            checkLevelUp();
+            break;
+          }
+        }
+      }
+    }
+
+    function checkLevelUp() {
+      if (score >= level * 50 && level < 6) {
+        level++;
+        spawnInterval = Math.max(500, spawnInterval - 300);
+      }
+    }
+
+    function endGame() {
+      gameRunning = false;
+      gameOver = true;
+      gameOverScreen.style.display = 'block';
+    }
+
+    function resetGame() {
+      score = 0;
+      level = 1;
+      lives = 3;
+      jokers = [];
+      nets = [];
+      spawnInterval = 2000;
+      lastSpawn = 0;
+      gameOverScreen.style.display = 'none';
+      updateScoreBoard();
+    }
+
+    function gameLoop(timestamp) {
+      if (!gameRunning) return;
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+      if (!lastSpawn || timestamp - lastSpawn > spawnInterval) {
+        spawnJoker();
+        lastSpawn = timestamp;
+      }
+
+      updateJokers(timestamp - lastSpawn);
+      updateNets(timestamp - lastSpawn);
+      checkCollisions();
+
+      drawJokers();
+      drawSpiderMan();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function shootNet(side) {
+      const x = side === 'left' ? spiderManX - 30 : spiderManX + 30;
+      const y = spiderManY - 40;
+      nets.push({ x: x, y: y });
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (!gameRunning) return;
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      if (x < WIDTH / 2) {
+        shootNet('left');
+      } else {
+        shootNet('right');
+      }
+    });
+
+    startButton.addEventListener('click', () => {
+      instructions.style.display = 'none';
+      resetGame();
+      gameRunning = true;
+      gameOver = false;
+      requestAnimationFrame(gameLoop);
+    });
+
+    gameOverScreen.addEventListener('click', () => {
+      if (gameOver) {
+        instructions.style.display = 'block';
+        gameOver = false;
+      }
+    });
+  </script>
+</body>
+</html>
 
